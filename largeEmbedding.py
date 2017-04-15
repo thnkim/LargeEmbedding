@@ -5,29 +5,30 @@ from torch.autograd import Variable
 
 
 class LargeEmbedding(nn.Module):
-	def __init__(self, n_tracks, dim_track, page_size=0, use_cuda=True):
+	def __init__(self, n_words, dim_word, page_size=0, num_devices=2, use_cuda=True):
 		super(LargeEmbedding, self).__init__()
-		self.n_tracks = n_tracks
-		self.dim_track = dim_track
+		self.n_words = n_words
+		self.dim_word = dim_word
+		self.num_devices = num_devices
 		self.use_cuda = use_cuda
 
 		if page_size <= 0:
-			page_size = n_tracks
+			page_size = n_words
 
 		self.page_size = page_size
-		self.num_pages = (n_tracks + self.page_size - 1) // self.page_size
+		self.num_pages = (n_words + self.page_size - 1) // self.page_size
 		print('making {0} LUTs'.format(self.num_pages))
-		embedding_list = [nn.Embedding(self.page_size, self.dim_track, sparse=(not use_cuda)) for i in range(self.num_pages)]
+		embedding_list = [nn.Embedding(self.page_size, self.dim_word, sparse=(not use_cuda)) for i in range(self.num_pages)]
 		if self.use_cuda:
 			for i, embedding in enumerate(embedding_list):
-				embedding.cuda(i % 2)
+				embedding.cuda(i % self.num_devices)
 		self.embeddings = nn.ModuleList(embedding_list)
 		print(self.embeddings)
 
 	def forward(self, indices_):
 		indices = indices_.view(1, -1)
 
-		y = torch.FloatTensor(1, indices.size(-1), self.dim_track)
+		y = torch.FloatTensor(1, indices.size(-1), self.dim_word)
 		index_seq = torch.arange(0, indices.size(-1)).long().view(1, -1)
 		if self.use_cuda:
 			y = y.cuda()
@@ -45,7 +46,7 @@ class LargeEmbedding(nn.Module):
 				continue
 			indices_i = torch.index_select(indices, 1, masked_idx_i) - page_offset
 			if self.use_cuda:
-				indices_i = indices_i.cuda(i % 2)
+				indices_i = indices_i.cuda(i % self.num_devices)
 				v_i = self.embeddings[i](indices_i).cuda()
 			else:
 				v_i = self.embeddings[i](indices_i)
@@ -53,13 +54,13 @@ class LargeEmbedding(nn.Module):
 			#
 			page_offset += self.page_size
 
-		y = y.view(indices_.size(0), indices_.size(1), self.dim_track)
+		y = y.view(indices_.size(0), indices_.size(1), self.dim_word)
 
 		return y
 
 
 if __name__ == '__main__':
-	embedding = LargeEmbedding(50000, 4, 10000, use_cuda=True)
+	embedding = LargeEmbedding(n_words=50000, dim_word=4, page_size=10000, num_devices=2, use_cuda=True)
 
 	x = Variable(torch.LongTensor([[0, 1, 10000, 30100], [10000, 1, 30100, 0]]).cuda())
 	print('embedding:', embedding(x))
