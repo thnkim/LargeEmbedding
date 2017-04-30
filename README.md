@@ -5,7 +5,10 @@ When you want to try embedding of a large number of words (for example, more tha
 
 Currently, we have two partitioning options:
 1. LUT will be evenly partitioned into pages of which size is [*page_size*], simply distributed into [*num_devices*] GPUs. Simply, *page[i]* will be on the device *i % num_devices*.
-2. LUT will be evenly partitioned into pages of which size is [*page_size*]. But each page can be distributed into specified device or devices. See examples below.
+2. LUT will be evenly partitioned into pages of which size is [*page_size*]. But each page can be distributed into specified device or devices (see examples below). You can map page[i] to device_list[i], which can be an integer (device-id) or a tuple (device-ids). If a tuple is specified for page[i], it will be wrapped by torch.nn.DataParallel, but its efficiency has not been tested yet. In my case, to use 8 GPUs, it seemed partitioning 10M words of LUT into 8 pages each of which size is 1.25M words was faster than mirroring 10M words of LUTs on 8 GPUs and doing data-parallelizing, at least for the training.
+
+Note: I have not tried Pytorch's new sparse operation for this case yet.
+
 
 # How to use
 ```python
